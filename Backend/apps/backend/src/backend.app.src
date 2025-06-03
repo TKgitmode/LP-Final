@@ -1,0 +1,15 @@
+{application, backend,
+ [
+  {description, "UNO backend"},
+  {vsn, "0.1.0"},
+  {registered, []},
+  {applications, [
+      kernel,
+      stdlib,
+      cowboy,
+      ranch,
+      sasl
+  ]},
+  {mod, {backend_app, []}},
+  {env, []}
+ ]}.

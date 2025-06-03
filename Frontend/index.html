@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>UNO Online</title>
+<style>
+  body {
+    background: linear-gradient(135deg, #0077be, #00d4ff);
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    color: #fff;
+    margin: 0; padding: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+  }
+  header {
+    margin: 1em;
+    font-size: 2rem;
+    font-weight: 700;
+    letter-spacing: 2px;
+  }
+  #game-area {
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 10px;
+    padding: 1.5em;
+    width: 90%;
+    max-width: 600px;
+    box-shadow: 0 8px 16px rgba(0,0,0,0.4);
+  }
+  .hand {
+    display: flex;
+    justify-content: center;
+    gap: 0.6em;
+    margin-bottom: 1em;
+  }
+  .card {
+    background: #fff;
+    color: #222;
+    border-radius: 8px;
+    width: 60px;
+    height: 90px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-weight: 700;
+    font-size: 1.2rem;
+    cursor: pointer;
+    user-select: none;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+    transition: transform 0.2s ease;
+  }
+  .card.red { background-color: #e74c3c; color: white; }
+  .card.green { background-color: #27ae60; color: white; }
+  .card.blue { background-color: #2980b9; color: white; }
+  .card.yellow { background-color: #f1c40f; color: #222; }
+  .card:hover {
+    transform: scale(1.1);
+    box-shadow: 0 6px 12px rgba(0,0,0,0.5);
+  }
+  #top-card {
+    margin: 1em auto;
+    text-align: center;
+    font-size: 1.5rem;
+  }
+  #top-card .card {
+    margin: 0 auto;
+    cursor: default;
+  }
+  button {
+    background: #1abc9c;
+    border: none;
+    padding: 0.8em 1.6em;
+    font-size: 1.1rem;
+    border-radius: 8px;
+    cursor: pointer;
+    color: white;
+    font-weight: 700;
+    box-shadow: 0 4px 10px rgba(26, 188, 156, 0.6);
+    transition: background 0.3s ease;
+  }
+  button:hover {
+    background: #16a085;
+  }
+  #status {
+    margin-top: 1em;
+    font-size: 1.1rem;
+    min-height: 24px;
+  }
+</style>
+</head>
+<body>
+
+<header>UNO Online</header>
+
+<div id="game-area">
+  <div id="top-card">
+    <div class="card" id="pile-top">?</div>
+    <div>Carta superior</div>
+  </div>
+
+  <div class="hand" id="player-hand">
+    <!-- Aquí van las cartas del jugador -->
+  </div>
+
+  <button id="draw-btn">Robar carta</button>
+
+  <div id="status"></div>
+</div>
+
+<script>
+  const ws = new WebSocket("ws://localhost:8080/ws"); // Cambia la URL según tu backend
+
+  const playerHandEl = document.getElementById("player-hand");
+  const pileTopEl = document.getElementById("pile-top");
+  const statusEl = document.getElementById("status");
+  const drawBtn = document.getElementById("draw-btn");
+
+  function atomToClass(atom) {
+    return atom.toLowerCase();
+  }
+
+  // Actualiza la mano del jugador y la carta superior
+  function updateState(state) {
+    // Actualizar cartas en mano
+    playerHandEl.innerHTML = "";
+    state.hand.forEach(card => {
+      const [color, num] = card;
+      const cardEl = document.createElement("div");
+      cardEl.className = "card " + atomToClass(color);
+      cardEl.textContent = num;
+      cardEl.onclick = () => {
+        playCard(color, num);
+      };
+      playerHandEl.appendChild(cardEl);
+    });
+
+    // Actualizar carta superior
+    if(state.top_card && state.top_card.length === 2) {
+      const [color, num] = state.top_card;
+      pileTopEl.className = "card " + atomToClass(color);
+      pileTopEl.textContent = num;
+    } else {
+      pileTopEl.textContent = "?";
+    }
+
+    // Mostrar estado turno o ganador
+    if(state.winner && state.winner !== "null") {
+      statusEl.textContent = `¡Ganador: ${state.winner}!`;
+      drawBtn.disabled = true;
+    } else if(state.your_turn) {
+      statusEl.textContent = "Es tu turno";
+      drawBtn.disabled = false;
+    } else {
+      statusEl.textContent = "Esperando turno...";
+      drawBtn.disabled = true;
+    }
+  }
+
+  function playCard(color, num) {
+    const msg = {
+      type: "play",
+      card: [color, num]
+    };
+    ws.send(JSON.stringify(msg));
+  }
+
+  function drawCard() {
+    const msg = {
+      type: "draw"
+    };
+    ws.send(JSON.stringify(msg));
+  }
+
+  drawBtn.onclick = drawCard;
+
+  ws.onopen = () => {
+    ws.send("join");
+  };
+
+  ws.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      if(data.type === "state") {
+        updateState(data);
+      } else if(data.type === "error") {
+        statusEl.textContent = "Error: " + data.message;
+      } else if(data.type === "draw_result") {
+        statusEl.textContent = "Carta robada: " + data.card[1] + " (" + data.card[0] + ")";
+      }
+    } catch(e) {
+      console.error("Error parsing message", e);
+    }
+  };
+
+  ws.onerror = (e) => {
+    statusEl.textContent = "Conexión WebSocket fallida.";
+  };
+</script>
+
+</body>
+</html>
