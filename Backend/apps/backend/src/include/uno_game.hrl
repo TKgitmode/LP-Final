@@ -4,5 +4,7 @@
     pile,         %% pila de descarte
     turn,         %% pid del turno actual
     winner,       %% pid ganador
-    direction = 1 %% 1 o -1 para indicar dirección del turno
+    direction = 1, %% 1 o -1 para indicar dirección del turno
+    uno_declared = undefined,
+    current_color = undefined
 }).
