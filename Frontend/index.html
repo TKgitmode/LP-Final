@@ -36,29 +36,66 @@
     margin-bottom: 1em;
   }
   .card {
-    background: #fff;
-    color: #222;
-    border-radius: 8px;
-    width: 60px;
-    height: 90px;
+    position: relative;
+    width: 70px;
+    height: 100px;
+    border-radius: 20px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.3);
     display: flex;
+    flex-direction: column;
     justify-content: center;
     align-items: center;
-    font-weight: 700;
-    font-size: 1.2rem;
-    cursor: pointer;
-    user-select: none;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+    font-weight: bold;
+    font-size: 2rem; /* Aumentado */
+    text-align: center;
+    color: white;
+    padding: 0.5em;
     transition: transform 0.2s ease;
+    border: 2px solid #fff;
   }
-  .card.red { background-color: #e74c3c; color: white; }
-  .card.green { background-color: #27ae60; color: white; }
-  .card.blue { background-color: #2980b9; color: white; }
-  .card.yellow { background-color: #f1c40f; color: #222; }
+
   .card:hover {
-    transform: scale(1.1);
-    box-shadow: 0 6px 12px rgba(0,0,0,0.5);
+    transform: scale(1.08);
+    box-shadow: 0 6px 14px rgba(0,0,0,0.5);
   }
+
+  .corner {
+    position: absolute;
+    top: 6px;
+    left: 8px;
+    font-size: 1rem;
+    opacity: 0.85;
+    color: white;
+  }
+
+  .center-symbol {
+    font-size: 2.2rem;
+    line-height: 1.2;
+    user-select: none;
+  }
+  .card.red {
+    background: radial-gradient(circle at top left, #ff6b6b, #c0392b);
+  }
+
+  .card.green {
+    background: radial-gradient(circle at top left, #2ecc71, #27ae60);
+  }
+
+  .card.blue {
+    background: radial-gradient(circle at top left, #3498db, #2980b9);
+  }
+
+  .card.yellow {
+    background: radial-gradient(circle at top left, #f9e79f, #f1c40f);
+    color: #222;
+    text-shadow: none;
+  }
+
+  .card:hover {
+    transform: scale(1.12);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.7);
+  }
+
   #top-card {
     margin: 1em auto;
     text-align: center;
@@ -88,6 +125,30 @@
     font-size: 1.1rem;
     min-height: 24px;
   }
+
+  #reshuffle-msg {
+  display: none;
+  font-size: 1.2rem;
+  margin-top: 1em;
+  animation: fade 2s ease-in-out;
+  color: #f39c12;
+  font-weight: bold;
+}
+
+@keyframes fade {
+  0%   { opacity: 0; transform: scale(0.9); }
+  50%  { opacity: 1; transform: scale(1.1); }
+  100% { opacity: 0; transform: scale(0.9); }
+}
+
+#uno-btn {
+  background: #e74c3c;
+  margin-top: 1em;
+}
+#uno-btn:hover {
+  background: #c0392b;
+}
+
 </style>
 </head>
 <body>
@@ -97,7 +158,7 @@
 <div id="game-area">
   <div id="top-card">
     <div class="card" id="pile-top">?</div>
-    <div>Carta superior</div>
+    <div>Card on Game</div>
   </div>
 
   <div class="hand" id="player-hand">
@@ -107,7 +168,29 @@
   <button id="draw-btn">Robar carta</button>
 
   <div id="status"></div>
+
+  <button id="reset-btn" style="display: none;">Volver a Jugar</button>
+  <div id="reshuffle-msg">¡Mazo barajeado para continuar!</div>
 </div>
+
+<button id="uno-btn" style="display: none;">¡UNO!</button> 
+<canvas id="confetti" style="position: fixed; top:0; left:0; pointer-events: none;"></canvas> 
+
+<!-- Modal de selección de color -->
+<div id="color-picker-modal" style="display: none; position: fixed; top: 0; left: 0;
+  width: 100vw; height: 100vh; background: rgba(0,0,0,0.6); justify-content: center; align-items: center; z-index: 9999;">
+  <div style="background: white; padding: 2em; border-radius: 12px; text-align: center; box-shadow: 0 0 20px rgba(0,0,0,0.5); color: #000;">
+    <h2>Elige un color</h2>
+    <div style="display: flex; gap: 1em; justify-content: center; margin-top: 1em;">
+      <button class="color-choice" data-color="red" style="background:#e74c3c;width:60px;height:60px;border:none;border-radius:50%;cursor:pointer;"></button>
+      <button class="color-choice" data-color="green" style="background:#27ae60;width:60px;height:60px;border:none;border-radius:50%;cursor:pointer;"></button>
+      <button class="color-choice" data-color="blue" style="background:#2980b9;width:60px;height:60px;border:none;border-radius:50%;cursor:pointer;"></button>
+      <button class="color-choice" data-color="yellow" style="background:#f1c40f;width:60px;height:60px;border:none;border-radius:50%;cursor:pointer;"></button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.5.1/dist/confetti.browser.min.js"></script> 
 
 <script>
   const ws = new WebSocket("ws://localhost:8080/ws"); // Cambia la URL según tu backend
@@ -116,6 +199,50 @@
   const pileTopEl = document.getElementById("pile-top");
   const statusEl = document.getElementById("status");
   const drawBtn = document.getElementById("draw-btn");
+
+  const resetBtn = document.getElementById("reset-btn");
+
+  const unoBtn = document.getElementById("uno-btn");
+
+  let pendingWildCard = null;
+
+  function getCardSymbol(value) {
+    switch (value) {
+      case "skip": return "⛔";
+      case "reverse": return "↩️";
+      case "draw2": return "+2";
+      case "draw4": return "+4";
+      case "wild": return "★";
+      default: return value.toString();
+    }
+  }
+
+  // Enviar mensaje para declarar UNO
+  unoBtn.onclick = () => {
+    ws.send(JSON.stringify({ type: "declare_uno" }));
+  };
+
+  // Mostrar botón UNO solo si tienes 2 cartas
+  function updateUnoButton(hand) {
+    if (hand.length === 2) {
+      unoBtn.style.display = "inline-block";
+    } else {
+      unoBtn.style.display = "none";
+    }
+  }
+
+  // Lanzar confeti
+  function launchConfetti() {
+    confetti({
+      particleCount: 100,
+      spread: 80,
+      origin: { y: 0.6 }
+    });
+  }
+
+  resetBtn.onclick = () => {
+    ws.send(JSON.stringify({ type: "reset" }));
+  };
 
   function atomToClass(atom) {
     return atom.toLowerCase();
@@ -129,12 +256,27 @@
       const [color, num] = card;
       const cardEl = document.createElement("div");
       cardEl.className = "card " + atomToClass(color);
-      cardEl.textContent = num;
+
+      const topLeft = document.createElement("div");
+      topLeft.className = "corner";
+      topLeft.textContent = getCardSymbol(num);
+
+      const center = document.createElement("div");
+      center.className = "center-symbol";
+      center.textContent = getCardSymbol(num);
+
+      cardEl.appendChild(topLeft);
+      cardEl.appendChild(center);
+
       cardEl.onclick = () => {
         playCard(color, num);
       };
+
       playerHandEl.appendChild(cardEl);
     });
+
+    // Mostrar botón UNO si es necesario
+    updateUnoButton(state.hand); // NUEVO
 
     // Actualizar carta superior
     if(state.top_card && state.top_card.length === 2) {
@@ -145,10 +287,13 @@
       pileTopEl.textContent = "?";
     }
 
-    // Mostrar estado turno o ganador
+    // Mostrar estado de juego
     if(state.winner && state.winner !== "null") {
       statusEl.textContent = `¡Ganador: ${state.winner}!`;
       drawBtn.disabled = true;
+      unoBtn.style.display = "none";
+      resetBtn.style.display = "inline-block"; // Mostrar botón de reinicio
+      launchConfetti(); // NUEVO
     } else if(state.your_turn) {
       statusEl.textContent = "Es tu turno";
       drawBtn.disabled = false;
@@ -156,14 +301,30 @@
       statusEl.textContent = "Esperando turno...";
       drawBtn.disabled = true;
     }
+
+    // Reinicio si no hay ganador
+    if (!state.winner || state.winner === "null") {
+      resetBtn.style.display = "none";
+    }
+  }
+
+  function showReshuffleMessage() {
+    const reshuffleEl = document.getElementById("reshuffle-msg");
+    reshuffleEl.style.display = "block";
+    reshuffleEl.style.opacity = "1";
+    setTimeout(() => {
+      reshuffleEl.style.display = "none";
+    }, 2000); // Oculta después de 2s
   }
 
   function playCard(color, num) {
-    const msg = {
-      type: "play",
-      card: [color, num]
-    };
-    ws.send(JSON.stringify(msg));
+    if (num === "wild" || num === "draw4") {
+      pendingWildCard = { type: "play", card: [color, num] };
+      showColorPicker();
+    } else {
+      const msg = { type: "play", card: [color, num] };
+      ws.send(JSON.stringify(msg));
+    }
   }
 
   function drawCard() {
@@ -188,6 +349,8 @@
         statusEl.textContent = "Error: " + data.message;
       } else if(data.type === "draw_result") {
         statusEl.textContent = "Carta robada: " + data.card[1] + " (" + data.card[0] + ")";
+      } else if(data.type === "reshuffle") {
+        showReshuffleMessage();
       }
     } catch(e) {
       console.error("Error parsing message", e);
@@ -197,6 +360,32 @@
   ws.onerror = (e) => {
     statusEl.textContent = "Conexión WebSocket fallida.";
   };
+
+  function showColorPicker() {
+    document.getElementById("color-picker-modal").style.display = "flex";
+  }
+
+  function hideColorPicker() {
+    document.getElementById("color-picker-modal").style.display = "none";
+  }
+
+  // Manejar clic en botones de color
+  document.querySelectorAll(".color-choice").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const chosenColor = btn.dataset.color;
+      if (pendingWildCard) {
+        pendingWildCard.chosen_color = chosenColor;
+        ws.send(JSON.stringify(pendingWildCard));
+
+        // Actualizar carta superior visualmente
+        pileTopEl.className = "card " + chosenColor;
+        pileTopEl.textContent = ""; // sin número
+
+        pendingWildCard = null;
+        hideColorPicker();
+      }
+    });
+  });
 </script>
 
 </body>
